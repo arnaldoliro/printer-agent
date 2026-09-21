@@ -1,0 +1,35 @@
+# --- local configuration (NEVER commit: contains IPs, tokens, credentials) ---
+config.yaml
+config.local.yaml
+*.local.yaml
+.env
+.env.*
+
+# --- captured data (gigabytes of frames) ---
+dados/
+data/
+recordings/
+*.mp4
+*.mkv
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# --- tooling ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- editors / os ---
+.vscode/
+.idea/
+*.swp
+.DS_Store

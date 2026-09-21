@@ -1,0 +1,61 @@
+# printer-agent — example configuration
+#
+# Copy this file to `config.yaml` and edit it. `config.yaml` is gitignored
+# because it holds addresses and tokens that must never reach the repository.
+#
+#   cp config.example.yaml config.yaml
+#
+# NOTE: this file describes the target shape of the configuration. Options are
+# read by the agent as each feature lands; nothing here is wired up yet.
+
+# --- how the agent sees the print -------------------------------------------
+camera:
+  # webcam  -> local USB camera (uses `device`)
+  # network -> RTSP / MJPEG stream (uses `url`)
+  # file    -> recorded video file, used for offline development (uses `path`)
+  source: webcam
+  device: 0
+  # url: rtsp://192.168.0.50:554/stream
+  # path: ./samples/failed-print.mp4
+
+  # One frame every 10 seconds. Print failures unfold over minutes, not frames.
+  capture_interval_seconds: 10
+
+# --- how the agent talks to the printer -------------------------------------
+printer:
+  # moonraker -> Klipper (Ender V3 KE, K1, Qidi, Sovol, Voron, ...)
+  # octoprint -> OctoPrint
+  # none      -> notify only; the agent cannot pause the print
+  type: moonraker
+  url: http://192.168.0.42:7125
+  # api_key: ""
+
+# --- what the agent is allowed to do ----------------------------------------
+# observer -> detects and logs "I would have paused here". Never touches the
+#             printer. Keep this until the detector has earned your trust.
+# active   -> allowed to pause the print on a confirmed failure.
+mode: observer
+
+# --- where recordings go ----------------------------------------------------
+storage:
+  path: ./dados
+  max_gb: 20
+  # Successful prints are thinned out; failures are kept in full, because a
+  # recorded failure is the one thing you cannot download or buy.
+  keep_on_success_every_seconds: 120
+  keep_on_failure: all
+
+# --- how the user finds out -------------------------------------------------
+notifier:
+  # console  -> prints to the log (default while developing)
+  # telegram -> bot message with photo and action buttons
+  type: console
+  # telegram:
+  #   bot_token: ""
+  #   chat_id: ""
+
+logging:
+  level: INFO
+  # Rotation is mandatory: embedded printer boards have very little storage.
+  max_bytes: 5242880
+  backup_count: 3
