@@ -17,9 +17,11 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 dependencies = [
+    "httpx>=0.27",
     "opencv-python-headless>=4.10",
     "pydantic>=2.9",
     "pyyaml>=6.0",
+    "websockets>=13.0",
 ]
 
 [project.scripts]
@@ -32,6 +34,7 @@ Repository = "https://github.com/arnaldoliro/printer-agent"
 [dependency-groups]
 dev = [
     "pytest>=8.3",
+    "pytest-asyncio>=0.24",
     "ruff>=0.7",
 ]
 
@@ -68,3 +71,5 @@ select = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

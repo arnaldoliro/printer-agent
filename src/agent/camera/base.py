@@ -4,14 +4,20 @@ Everything downstream — recording today, detection later — consumes frames
 through this interface, so the same code runs against a USB webcam, a network
 camera, or a recorded file.
 
-Pacing lives inside the source on purpose. A live source has to wait for wall
-clock time to pass between frames; a recorded file must NOT, or replaying a
-40 hour print would take 40 hours. Both honour the same capture interval, and
-the caller never has to know which kind it is holding.
+Two rules shape this design:
+
+* **Pacing belongs to the source.** A live source has to wait for wall clock
+  time to pass between frames; a recorded file must NOT, or replaying a 40 hour
+  print would take 40 hours. Both honour the same capture interval and the
+  caller never has to know which kind it is holding.
+* **Blocking work runs in a thread.** OpenCV is synchronous, and a blocking
+  call inside the event loop would stall the Moonraker websocket. Subclasses
+  implement plain blocking methods; this class moves them off the loop.
 """
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -45,17 +51,11 @@ class VideoSource(ABC):
             raise ValueError("interval_seconds must be greater than zero")
         self.interval_seconds = interval_seconds
 
+    # -- to implement ------------------------------------------------------
+
     @abstractmethod
     def open(self) -> None:
-        """Acquire the underlying device or file."""
-
-    @abstractmethod
-    def read(self) -> Frame | None:
-        """Return the next frame, or None once the source is exhausted.
-
-        Live sources block until the next frame is due. File sources return
-        immediately, skipping ahead within the recording.
-        """
+        """Acquire the underlying device or file. May block."""
 
     @abstractmethod
     def close(self) -> None:
@@ -65,14 +65,35 @@ class VideoSource(ABC):
     def describe(self) -> str:
         """Short description stored in the job metadata."""
 
-    def __enter__(self) -> VideoSource:
-        self.open()
+    @abstractmethod
+    def capture(self) -> Frame | None:
+        """Grab one frame, or None once the source is exhausted. May block."""
+
+    @abstractmethod
+    def seconds_until_next(self) -> float:
+        """How long to wait before the next capture is due.
+
+        Live sources return the time left in the interval; file sources return
+        zero, because their interval is applied by skipping frames instead.
+        """
+
+    # -- used by callers ---------------------------------------------------
+
+    async def read(self) -> Frame | None:
+        """Wait until the next frame is due, then capture it off the loop."""
+        delay = self.seconds_until_next()
+        if delay > 0:
+            await asyncio.sleep(delay)
+        return await asyncio.to_thread(self.capture)
+
+    async def __aenter__(self) -> VideoSource:
+        await asyncio.to_thread(self.open)
         return self
 
-    def __exit__(
+    async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        self.close()
+        await asyncio.to_thread(self.close)

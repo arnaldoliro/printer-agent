@@ -9,14 +9,15 @@ from agent.camera import FileSource
 from agent.recorder import Recorder, slugify
 
 
-def record(video: Path, output: Path, **kwargs):
+async def record(video: Path, output: Path, **kwargs):
     source = FileSource(video, interval_seconds=1.0)
-    return Recorder(source=source, storage_path=output, name="teste de impressao").run(**kwargs)
+    recorder = Recorder(source=source, storage_path=output, name="teste de impressao")
+    return await recorder.run(**kwargs)
 
 
-def test_writes_frames_and_metadata(sample_video: Path, tmp_path: Path) -> None:
+async def test_writes_frames_and_metadata(sample_video: Path, tmp_path: Path) -> None:
     output = tmp_path / "dados"
-    job = record(sample_video, output)
+    job = await record(sample_video, output)
 
     job_dir = Path(job.directory)
     frames = sorted((job_dir / "frames").glob("*.jpg"))
@@ -27,8 +28,8 @@ def test_writes_frames_and_metadata(sample_video: Path, tmp_path: Path) -> None:
     assert frames[0].stat().st_size > 0
 
 
-def test_metadata_describes_the_job(sample_video: Path, tmp_path: Path) -> None:
-    job = record(sample_video, tmp_path / "dados")
+async def test_metadata_describes_the_job(sample_video: Path, tmp_path: Path) -> None:
+    job = await record(sample_video, tmp_path / "dados")
     metadata = json.loads((Path(job.directory) / "job.json").read_text())
 
     assert metadata["status"] == "completed"
@@ -40,23 +41,23 @@ def test_metadata_describes_the_job(sample_video: Path, tmp_path: Path) -> None:
     assert metadata["agent_version"]
 
 
-def test_job_directory_is_named_after_the_job(sample_video: Path, tmp_path: Path) -> None:
-    job = record(sample_video, tmp_path / "dados")
+async def test_job_directory_is_named_after_the_job(sample_video: Path, tmp_path: Path) -> None:
+    job = await record(sample_video, tmp_path / "dados")
     assert Path(job.directory).name.endswith("_teste-de-impressao")
 
 
-def test_max_frames_stops_early(sample_video: Path, tmp_path: Path) -> None:
-    job = record(sample_video, tmp_path / "dados", max_frames=2)
+async def test_max_frames_stops_early(sample_video: Path, tmp_path: Path) -> None:
+    job = await record(sample_video, tmp_path / "dados", max_frames=2)
     assert job.frame_count == 2
 
 
-def test_metadata_exists_before_the_job_ends(sample_video: Path, tmp_path: Path) -> None:
+async def test_metadata_exists_before_the_job_ends(sample_video: Path, tmp_path: Path) -> None:
     """A crash or a power cut must still leave a readable record."""
     output = tmp_path / "dados"
     source = FileSource(sample_video, interval_seconds=1.0)
     recorder = Recorder(source=source, storage_path=output, name="parcial")
 
-    recorder.run(max_frames=1)
+    await recorder.run(max_frames=1)
     job_dirs = list(output.iterdir())
 
     assert len(job_dirs) == 1

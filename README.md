@@ -56,8 +56,49 @@ dados/
 the outcome. `result` stays `unknown` until a print result is known — the printer reports it
 once Moonraker integration lands.
 
-Start and stop are manual for now. Useful flags: `--interval`, `--quality`, `--output`,
-`--max-frames`, `--max-duration`.
+Useful flags: `--interval`, `--quality`, `--output`, `--max-frames`, `--max-duration`.
+
+## Following the printer
+
+`watch` removes the need to remember anything: the printer starts and stops the recording, and
+reports how each print ended, so recordings arrive already labelled.
+
+```bash
+# is the printer reachable?
+uv run printer-agent status --printer-url http://192.168.0.42:7125
+
+# follow it and record every print
+uv run printer-agent watch --printer-url http://192.168.0.42:7125
+```
+
+`job.json` then also carries:
+
+```json
+{
+  "result": "success",
+  "notes": { "printer_outcome": "complete" },
+  "gcode": { "estimated_time": 7200, "layer_count": 180, "filament_total": 4210.5 }
+}
+```
+
+A print the printer reports as `complete` is labelled `success` and one that ended in `error`
+is labelled `failure`. **`cancelled` stays `unknown` on purpose**: someone pressing cancel may
+have spotted a failure or may simply have changed their mind, and guessing would poison the
+dataset every later model is trained on. The raw printer outcome is kept in `notes` so those
+jobs can be labelled by hand.
+
+The websocket reconnects on its own with backoff — an agent watching an overnight print cannot
+end its session because the network blinked.
+
+### Observer mode
+
+```yaml
+mode: observer   # observer | active
+```
+
+`observer` is the default and the agent refuses every command that would change a running
+print; it records what it *would* have done. Move to `active` only once a detector has earned
+it. A false positive cancelling a 20 hour print costs more than a missed detection.
 
 
 ## Requirements

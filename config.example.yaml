@@ -5,8 +5,8 @@
 #
 #   cp config.example.yaml config.yaml
 #
-# NOTE: this file describes the target shape of the configuration. Options are
-# read by the agent as each feature lands; nothing here is wired up yet.
+# Options marked "not read yet" are documented ahead of the feature that uses
+# them; everything else is live.
 
 # --- how the agent sees the print -------------------------------------------
 camera:
@@ -24,11 +24,14 @@ camera:
 # --- how the agent talks to the printer -------------------------------------
 printer:
   # moonraker -> Klipper (Ender V3 KE, K1, Qidi, Sovol, Voron, ...)
-  # octoprint -> OctoPrint
   # none      -> notify only; the agent cannot pause the print
   type: moonraker
   url: http://192.168.0.42:7125
   # api_key: ""
+  timeout_seconds: 10
+
+  # Check it answers before anything else:
+  #   printer-agent status --printer-url http://192.168.0.42:7125
 
 # --- what the agent is allowed to do ----------------------------------------
 # observer -> detects and logs "I would have paused here". Never touches the
@@ -39,6 +42,8 @@ mode: observer
 # --- where recordings go ----------------------------------------------------
 storage:
   path: ./dados
+
+  # not read yet — retention lands with the storage limits
   max_gb: 20
   # Successful prints are thinned out; failures are kept in full, because a
   # recorded failure is the one thing you cannot download or buy.
@@ -47,6 +52,7 @@ storage:
 
 # --- how the user finds out -------------------------------------------------
 notifier:
+  # not read yet — the notifier lands after retention
   # console  -> prints to the log (default while developing)
   # telegram -> bot message with photo and action buttons
   type: console
@@ -56,6 +62,7 @@ notifier:
 
 logging:
   level: INFO
-  # Rotation is mandatory: embedded printer boards have very little storage.
+  # not read yet — rotation is mandatory once the agent writes log files:
+  # embedded printer boards have very little storage.
   max_bytes: 5242880
   backup_count: 3

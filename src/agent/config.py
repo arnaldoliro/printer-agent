@@ -16,6 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 DEFAULT_CONFIG_PATHS = (Path("config.yaml"), Path("config.local.yaml"))
 
 SourceKind = Literal["webcam", "network", "file"]
+PrinterKind = Literal["moonraker", "none"]
+
+#: observer -> the agent may watch and log, but never touches the print.
+#: active   -> the agent may pause a print it believes has failed.
+AgentMode = Literal["observer", "active"]
 
 
 class CameraConfig(BaseModel):
@@ -57,6 +62,19 @@ class CameraConfig(BaseModel):
         return f"file:{self.path}"
 
 
+class PrinterConfig(BaseModel):
+    """How the agent talks to the printer."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    #: "none" means notify-only: the agent watches but cannot pause. It keeps
+    #: printers without a usable API inside the product.
+    type: PrinterKind = "moonraker"
+    url: str = "http://127.0.0.1:7125"
+    api_key: str | None = None
+    timeout_seconds: float = Field(default=10.0, gt=0)
+
+
 class StorageConfig(BaseModel):
     """Where recordings go."""
 
@@ -74,9 +92,18 @@ class LoggingConfig(BaseModel):
 class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    #: Defaults to the safe end: a fresh install watches and never intervenes.
+    mode: AgentMode = "observer"
+
     camera: CameraConfig = Field(default_factory=CameraConfig)
+    printer: PrinterConfig = Field(default_factory=PrinterConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+    @property
+    def read_only(self) -> bool:
+        """True while the agent is not allowed to change a running print."""
+        return self.mode == "observer"
 
 
 def find_default_config() -> Path | None:

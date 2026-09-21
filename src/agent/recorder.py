@@ -7,6 +7,7 @@ without this running is data lost for good.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -14,7 +15,7 @@ import unicodedata
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 
@@ -23,7 +24,7 @@ from agent.camera.base import VideoSource
 
 logger = logging.getLogger(__name__)
 
-JobStatus = Literal["recording", "completed", "interrupted", "failed"]
+JobStatus = Literal["recording", "completed", "stopped", "interrupted", "failed"]
 #: Outcome of the print itself, which the agent cannot know yet. It stays
 #: "unknown" until a human labels it or, later, the printer reports it.
 JobResult = Literal["unknown", "success", "failure"]
@@ -55,6 +56,10 @@ class Job:
     frame_count: int = 0
     status: JobStatus = "recording"
     result: JobResult = "unknown"
+    #: Slicer metadata for the printed file: estimated time, filament, layer
+    #: count, thumbnails. Pairing it with the frames is what makes the
+    #: recordings useful for more than spaghetti detection later on.
+    gcode: dict[str, Any] | None = None
     notes: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> str:
@@ -84,17 +89,23 @@ class Recorder:
     def job(self) -> Job | None:
         return self._job
 
-    def run(self, max_frames: int | None = None, max_duration_seconds: float | None = None) -> Job:
-        """Record until the source is exhausted, a limit is hit, or Ctrl+C.
+    async def run(
+        self,
+        max_frames: int | None = None,
+        max_duration_seconds: float | None = None,
+    ) -> Job:
+        """Record until the source is exhausted, a limit is hit, or we are told to stop.
 
         The job metadata is written before the first frame and rewritten at the
         end, so an interrupted or crashed run still leaves a readable record.
+        Cancelling the task — which is how the watcher ends a job when the print
+        finishes — is a normal outcome, not an error.
         """
-        job = self._start()
+        job = self.start()
         started = datetime.now().astimezone()
 
         try:
-            with self.source:
+            async with self.source:
                 while True:
                     if max_frames is not None and job.frame_count >= max_frames:
                         logger.info("reached the frame limit of %d", max_frames)
@@ -105,17 +116,22 @@ class Recorder:
                         logger.info("reached the duration limit of %.0fs", max_duration_seconds)
                         break
 
-                    frame = self.source.read()
+                    frame = await self.source.read()
                     if frame is None:
                         logger.info("source exhausted after %d frames", job.frame_count)
                         break
 
-                    self._write_frame(frame.image, job.frame_count + 1)
+                    await asyncio.to_thread(self._write_frame, frame.image, job.frame_count + 1)
                     job.frame_count += 1
                     if job.frame_count % 10 == 0:
                         logger.info("captured %d frames", job.frame_count)
 
             job.status = "completed"
+        except asyncio.CancelledError:
+            logger.info("stopped after %d frames", job.frame_count)
+            job.status = "stopped"
+            self._finish(job, started)
+            raise
         except KeyboardInterrupt:
             logger.info("interrupted after %d frames", job.frame_count)
             job.status = "interrupted"
@@ -127,7 +143,34 @@ class Recorder:
         self._finish(job, started)
         return job
 
-    def _start(self) -> Job:
+    def set_gcode_metadata(self, metadata: dict[str, Any]) -> None:
+        """Attach the slicer metadata of the file being printed."""
+        if self._job is None:
+            raise RuntimeError("no job has been started")
+        self._job.gcode = metadata
+        self._write_metadata(self._job)
+
+    def set_outcome(self, result: JobResult, **notes: str) -> None:
+        """Label a finished job and rewrite its metadata.
+
+        Used by the watcher once the printer reports how the print ended.
+        """
+        if self._job is None:
+            raise RuntimeError("no job has been started")
+        self._job.result = result
+        self._job.notes.update(notes)
+        self._write_metadata(self._job)
+
+    def start(self) -> Job:
+        """Create the job directory and its metadata.
+
+        Called by `run`, but also callable beforehand: the watcher starts
+        recording as a background task and needs the job to exist immediately
+        so it can attach the slicer metadata to it.
+        """
+        if self._job is not None:
+            return self._job
+
         started_at = datetime.now().astimezone()
         directory = self.storage_path / f"{started_at:%Y-%m-%d_%H%M%S}_{slugify(self.name)}"
         frames_dir = directory / FRAMES_DIRNAME

@@ -47,11 +47,27 @@ class LiveSource(VideoSource):
         self._next_capture_at = None
         logger.info("opened %s", self.describe())
 
-    def read(self) -> Frame | None:
+    def seconds_until_next(self) -> float:
+        """Time left in the current interval; the first frame is immediate."""
+        now = time.monotonic()
+        if self._next_capture_at is None:
+            self._next_capture_at = now
+            return 0.0
+
+        remaining = self._next_capture_at - now
+        if remaining <= 0:
+            # Capturing fell behind (slow disk, busy CPU). Resync to now rather
+            # than trying to catch up with a burst of frames.
+            self._next_capture_at = now
+            return 0.0
+        return remaining
+
+    def capture(self) -> Frame | None:
         if self._capture is None:
             raise VideoSourceError("source is not open")
 
-        self._wait_for_next_capture()
+        if self._next_capture_at is not None:
+            self._next_capture_at += self.interval_seconds
 
         for _ in range(_FLUSH_FRAMES):
             self._capture.grab()
@@ -62,22 +78,6 @@ class LiveSource(VideoSource):
             return None
 
         return Frame(image=image, captured_at=datetime.now().astimezone())
-
-    def _wait_for_next_capture(self) -> None:
-        """Sleep until the next frame is due; the first frame is immediate."""
-        now = time.monotonic()
-        if self._next_capture_at is None:
-            self._next_capture_at = now + self.interval_seconds
-            return
-
-        remaining = self._next_capture_at - now
-        if remaining > 0:
-            time.sleep(remaining)
-            self._next_capture_at += self.interval_seconds
-        else:
-            # Capturing fell behind (slow disk, busy CPU). Resync to now instead
-            # of trying to catch up with a burst of frames.
-            self._next_capture_at = time.monotonic() + self.interval_seconds
 
     def close(self) -> None:
         if self._capture is not None:

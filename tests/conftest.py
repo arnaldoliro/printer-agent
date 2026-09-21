@@ -33,3 +33,17 @@ def sample_video(tmp_path: Path) -> Path:
     writer.release()
 
     return path
+
+
+@pytest.fixture
+async def fake_printer():
+    """A running fake Moonraker, torn down at the end of the test."""
+    from tests.fake_moonraker import FakeMoonraker
+
+    printer = FakeMoonraker()
+    port = await printer.start()
+    printer.url = f"http://127.0.0.1:{port}"
+    try:
+        yield printer
+    finally:
+        await printer.stop()

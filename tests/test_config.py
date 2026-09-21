@@ -61,3 +61,20 @@ def test_interval_must_be_positive() -> None:
 def test_describe_identifies_the_source() -> None:
     assert CameraConfig(source="webcam", device=1).describe() == "webcam:1"
     assert CameraConfig(source="file", path=Path("a.mp4")).describe() == "file:a.mp4"
+
+
+def test_observer_is_the_default_mode() -> None:
+    """A fresh install must never be able to touch a running print."""
+    config = AgentConfig()
+    assert config.mode == "observer"
+    assert config.read_only is True
+
+
+def test_active_mode_allows_control() -> None:
+    assert AgentConfig(mode="active").read_only is False
+
+
+def test_printer_defaults_to_moonraker() -> None:
+    config = AgentConfig()
+    assert config.printer.type == "moonraker"
+    assert config.printer.url.startswith("http://")

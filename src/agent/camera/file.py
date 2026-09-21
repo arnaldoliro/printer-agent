@@ -62,7 +62,11 @@ class FileSource(VideoSource):
             "opened %s (%.2f fps, keeping 1 in %d frames)", self.describe(), fps, self._step
         )
 
-    def read(self) -> Frame | None:
+    def seconds_until_next(self) -> float:
+        """Always zero: the interval is applied by skipping ahead, not waiting."""
+        return 0.0
+
+    def capture(self) -> Frame | None:
         if self._capture is None:
             raise VideoSourceError("source is not open")
 
