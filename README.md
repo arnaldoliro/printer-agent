@@ -25,6 +25,41 @@ configuration is required.
 - **Portable by construction.** Plain command line Python, no GUI dependencies, so the same
   code runs on a Pi, a PC, a phone, or an embedded printer board.
 
+## Recording
+
+Recording is the first thing the agent does, and it comes before any detection:
+print failures are rare, and a failure nobody recorded is training data lost for good.
+
+```bash
+# a USB webcam, one frame every 10 seconds
+uv run printer-agent record --source webcam --name suporte-monitor
+
+# a network camera, or a phone running an IP-camera app
+uv run printer-agent record --source network --url rtsp://192.168.0.50:554/stream
+
+# a recorded video file — replays instantly, no waiting
+uv run printer-agent record --source file --path samples/failed-print.avi
+```
+
+Stop with `Ctrl+C`; the job metadata is written either way. Each run produces:
+
+```
+dados/
+  2026-09-21_143022_suporte-monitor/
+    frames/
+      000001.jpg
+      000002.jpg
+    job.json
+```
+
+`job.json` records the source, the capture interval, start and end times, the frame count and
+the outcome. `result` stays `unknown` until a print result is known — the printer reports it
+once Moonraker integration lands.
+
+Start and stop are manual for now. Useful flags: `--interval`, `--quality`, `--output`,
+`--max-frames`, `--max-duration`.
+
+
 ## Requirements
 
 - Python 3.10 or newer
